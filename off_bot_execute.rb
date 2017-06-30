@@ -10,7 +10,7 @@ while(true) do
     puts "error"
     puts e
   end
-  sleep(60)
+  sleep(20)
 end
 
 

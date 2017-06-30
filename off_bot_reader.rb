@@ -128,9 +128,9 @@ def load_all
       i = max
       while(i >= last_id) do
         sleep(0.1)
-        puts i.to_s + " load (limit 40)"
-        json = load_mstdn({'local' => '1','since_id' => (i-40+1).to_s,'max_id' => (i+1).to_s,'limit' => '40'})
-        i -= 40
+        puts i.to_s + " load (limit 20)"
+        json = load_mstdn({'local' => '1','since_id' => (i-20+1).to_s,'max_id' => (i+1).to_s,'limit' => '20'})
+        i -= 20
         next if json.size < 1
         json.each{|j|
           next if j['id'].to_i <= last_id
@@ -142,8 +142,9 @@ def load_all
       json_all.each{|json|
         if json['content'] =~ /\<a +href\=\"https\:\/\/mstdn\-workers\.com\/#{@username}\"/ then
           message = json['content'].gsub(/\<.*?\>/,"")
-          control,arg = message.split(/ +/,2)
-          if control == @username then
+          control,arg = message.split(@username+" ",2)
+          #if control == @username then
+          if !arg.nil?
             db.execute("insert into read_data values(?,?);",arg,JSON.dump(json))
           end
         end

@@ -62,10 +62,54 @@ def write_ok(db,id)
   write_mstdn({'status' => msg, 'visibility' => 'public'})
 end
 
-def generate_write_off(db)
-  db.execute("select arg,json from read_data;") do |row|
-    arg = row[0]
-    json = JSON.parse(row[1])
+def generate_data(d)
+  msg = "#" + d[6].to_s + "\n"
+  msg += "「" + d[1] + "」\n" if !d[1].nil?
+  msg += "場所:" + d[2] + "\n" if !d[2].nil?
+  t = Time.at(d[0])
+  msg += "日時:" + t.strftime("%Y年%m月%d日 %H時%M分～") + "\n"
+  msg += "\n"
+  msg += "詳細:" + d[5] + "\n"
+  return msg
+end
+
+def show_execute(db,opt,row)
+  msg = "オフ会情報\n\n"
+  msg_hidden = "(" + Time.now.strftime("%Y年%m月%d日 %H時%M分") + "現在の情報です)\n\n"
+  opt = "" if opt.nil?
+  opt,other = opt.split(/ +/,2)
+  if opt == "all"
+    msg_hidden += "登録されている情報の最新２０件までのIDリストです\n\n"
+    db.execute("select off_datetime,off_title,off_location,account_display_name,account_name,message_url,id from off order by off_datetime desc limit 20;") do |row|
+      t = Time.at(row[0])
+      msg_hidden += "#" + row[6].to_s + ":"
+      msg_hidden += "日時:" + t.strftime("%Y年%m月%d日 %H時%M分～") + "\n"
+    end
+  elsif opt[0] =~ /^\#([0-9]+)$/
+    id = $1
+    d = db.execute("select off_datetime,off_title,off_location,account_display_name,account_name,message_url,id from off where id = ?;",id)
+    if d.size < 1
+      msg_hidden += "登録がありません"
+    else
+      d.each{ |row|
+        msg_hidden += generate_data(row)
+      }
+    end
+  else
+    msg_hidden += "現時点以降のリストです\n\n"
+    d = db.execute("select off_datetime,off_title,off_location,account_display_name,account_name,message_url,id from off where off_datetime > ?;",Time.now.to_i)
+    if d.size < 1
+      msg_hidden += "登録がありません"
+    else
+      d.each{ |row|
+        msg_hidden += generate_data(row)
+      }
+    end
+  end
+  write_mstdn({'status' => msg_hidden,'spoiler_text' => msg, 'visibility' => 'public'})
+end
+
+def default_execute(db,arg,json,row)
     off_datetime = nil
     off_title = nil
     off_location = nil
@@ -77,6 +121,9 @@ def generate_write_off(db)
     message_id = json['id']
     if json['content'] =~ /http\:\/\/twipla\.jp\/events\/([0-9]+)/
       off_title,off_location,off_datetime = getTwipla($1)
+      if not (off_title =~ /mstdn\-workers|社畜丼/)
+        off_title,off_location,off_datetime = [nil,nil,nil]
+      end
     else
       # 途中 :P
       # off_datetimeっぽいものを探す
@@ -104,6 +151,19 @@ def generate_write_off(db)
                  account_id,account_name,account_display_name,
                  message_content,message_url)
       write_ok(db,id)
+    end
+end
+
+
+def generate_write_off(db)
+  db.execute("select arg,json from read_data;") do |row|
+    arg = row[0]
+    json = JSON.parse(row[1])
+    cmd,opt = arg.split(/ +/,2)
+    if cmd == "show"
+      show_execute(db,opt,row)
+    else
+      default_execute(db,arg,json,row)
     end
   end
   # 全部処理が終わったはずなので全部消す
