@@ -129,7 +129,7 @@ def load_all
 #        json = load_mstdn({'local' => '1','since_id' => (i-20+1).to_s,'max_id' => (i+1).to_s,'limit' => '20'})
 #        i -= 20
 #        next if json.size < 1
-        json = load_mstdn({'local' => '1','since_id' => (last_id+1).to_s,'limit' => '30'})
+        json = load_mstdn({'local' => '1','since_id' => (last_id).to_s,'limit' => '30'})
         json.each{|j|
           next if j['id'].to_i <= last_id
           next if j['type'] != 'mention'
@@ -145,6 +145,7 @@ def load_all
           control,arg = message.split(/#{@username}[ \n　]*/,2)
           #if control == @username then
           if !arg.nil? and arg != ""
+puts "reader:" + arg
             db.execute("insert into read_data values(?,?);",arg,JSON.dump(json))
           end
         end

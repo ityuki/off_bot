@@ -139,26 +139,26 @@ def add_execute(db,opt,json,row)
     day = nil
     hour = 18
     min = 0
-    if opt =~ /\s([0-9０１２３４５６７８９]+)[\:：]([0-9０１２３４５６７８９]+)/
+    if opt =~ /([0-9０１２３４５６７８９]+)[\:：]([0-9０１２３４５６７８９]+)/
       # 時間？
       hour = $1
       min = $2
-    elsif opt =~ /\s([0-9０１２３４５６７８９]+)時([0-9０１２３４５６７８９]+)/
+    elsif opt =~ /([0-9０１２３４５６７８９]+)時([0-9０１２３４５６７８９]+)/
       # 時間？
       hour = $1
       min = $2
-    elsif opt =~ /\s([0-9０１２３４５６７８９]+)時/
+    elsif opt =~ /([0-9０１２３４５６７８９]+)時/
       # 時間？
       hour = $1
     end
     hour = val_to_int(hour)
     min = val_to_int(min)
-    if opt =~ /\s([0-9０１２３４５６７８９]+)[\/／]([0-9０１２３４５６７８９]+)[\/／]([0-9０１２３４５６７８９]+)/
+    if opt =~ /([0-9０１２３４５６７８９]+)[\/／\-－]([0-9０１２３４５６７８９]+)[\/／\-－]([0-9０１２３４５６７８９]+)/
       # 年月日?
       year = $1
       month = $2
       day = $3
-    elsif opt =~ /\s([0-9０１２３４５６７８９]+)[\/／]([0-9０１２３４５６７８９]+)/
+    elsif opt =~ /([0-9０１２３４５６７８９]+)[\/／\-－]([0-9０１２３４５６７８９]+)/
       # 月日？
       month = $1
       day = $2
@@ -179,7 +179,7 @@ def add_execute(db,opt,json,row)
     end
     opt =~ /場所[\:：\s](.*)/
     off_location = $1
-    opt =~ /[（［｛「『\(\[\{](.*?)[）］｝」』\)\]\}]/
+    opt =~ /「(.*?)」/
     off_title = $1
     return if off_datetime.nil? or off_location.nil? or off_title.nil?
       db.execute("insert into off values(NULL,?,?, ?,?,?, ?,?,?, ?, ?);",
@@ -221,7 +221,7 @@ def help_execute
   msg = "@off_botの使い方\n\n"
   msg_hidden = "@off_bot show [ all | # 番号]  登録されてる情報を表示 allと # 番号以外を指定すると何も指定しないのと同じ\n"
   msg_hidden += "@off_bot twiplaっぽいアドレス  twiplaのイベントを追加\n"
-  msg_hidden += "@off_bot add 日付 「オフ会タイトル」 場所：～  それっぽいオフ会情報を追加\n"
+  msg_hidden += "@off_bot add 日時 「オフ会タイトル」 場所：～  それっぽいオフ会情報を追加\n"
   msg_hidden += "@off_bot del # 番号  それっぽいオフ会情報を削除\n"
   msg_hidden += "@off_bot help これ。\n"
   msg_hidden += "# 番号 内部で勝手に割り振ってるオフ会の番号\n"
@@ -251,9 +251,9 @@ def default_execute(db,arg,json,row)
       day = nil
       hour = 18
       min = 0
-      if arg =~ /\s([0-9０１２３４５６７８９]+[\/／])([0-9０１２３４５６７８９]+[\/／])([0-9０１２３４５６７８９]+)/
+      if arg =~ /\s([0-9０１２３４５６７８９]+[\/／\-－])([0-9０１２３４５６７８９]+[\/／\-－])([0-9０１２３４５６７８９]+)/
         # 年月日?
-      elsif arg =~ /\s([0-9０１２３４５６７８９]+[\/／])([0-9０１２３４５６７８９]+)/
+      elsif arg =~ /\s([0-9０１２３４５６７８９]+[\/／\-－])([0-9０１２３４５６７８９]+)/
         # 月日？
       end
     end
