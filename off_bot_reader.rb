@@ -3,6 +3,7 @@
 
 # DB
 @db = "off_bot.sqlite3"
+@db_1st_execute = "PRAGMA journal_mode = MEMORY;"
 
 # use HTTPS
 @mastodon_server = "mstdn-workers.com"
@@ -74,20 +75,18 @@ SQL_EOF4
 
 def db_init
   # init
-  db = SQLite3::Database.new(@db)
-  begin
+  SQLite3::Database.new(@db) do |db|
+    db.execute(@db_1st_execute)
     db.transaction do
       @init_sql.each{|sql|
         db.execute(sql)
       }
     end
-  ensure
-    db.close
   end
 end
 
 def load_mstdn(form_data)
-  uri = URI.parse("https://" + @mastodon_server + "/api/v1/timelines/public");
+  uri = URI.parse("https://" + @mastodon_server + "/api/v1/notifications");
   http = Net::HTTP.new(uri.host, uri.port)
   http.use_ssl = true
   http.verify_mode = OpenSSL::SSL::VERIFY_NONE # :P
@@ -100,8 +99,8 @@ def load_mstdn(form_data)
 end
 
 def first_load
-  db = SQLite3::Database.new(@db)
-  begin
+  SQLite3::Database.new(@db) do |db|
+    db.execute(@db_1st_execute)
     db.transaction do
       if (db.execute("select count(*) from reader;"))[0][0] == 0 then
         # 最初は読み飛ばす
@@ -110,14 +109,12 @@ def first_load
         db.execute("insert into reader values(?,?);",json[0]['id'].to_i,Time.now.to_i)
       end
     end
-  ensure
-    db.close
   end
 end
 
 def load_all
-  db = SQLite3::Database.new(@db)
-  begin
+  SQLite3::Database.new(@db) do |db|
+    db.execute(@db_1st_execute)
     db.transaction do
       # 最終IDを取得
       last_id = (db.execute("select last_id from reader;"))[0][0]
@@ -126,32 +123,33 @@ def load_all
       json = load_mstdn({'local' => '1','limit' => 1})
       max = json[0]['id'].to_i
       i = max
-      while(i >= last_id) do
-        sleep(0.1)
-        puts i.to_s + " load (limit 20)"
-        json = load_mstdn({'local' => '1','since_id' => (i-20+1).to_s,'max_id' => (i+1).to_s,'limit' => '20'})
-        i -= 20
-        next if json.size < 1
+#      while(i >= last_id) do
+#        sleep(0.1)
+#        puts i.to_s + " load (limit 20)"
+#        json = load_mstdn({'local' => '1','since_id' => (i-20+1).to_s,'max_id' => (i+1).to_s,'limit' => '20'})
+#        i -= 20
+#        next if json.size < 1
+        json = load_mstdn({'local' => '1','since_id' => (last_id+1).to_s,'limit' => '30'})
         json.each{|j|
           next if j['id'].to_i <= last_id
+          next if j['type'] != 'mention'
+          next if '@' + j['account']['username'] == @username
           json_all.push(j)
         }
-      end
+#      end
       db.execute("update reader set last_id = ?, read_date = ?",max,Time.now.to_i)
       target = []
       json_all.each{|json|
-        if json['content'] =~ /\<a +href\=\"https\:\/\/mstdn\-workers\.com\/#{@username}\"/ then
-          message = json['content'].gsub(/\<.*?\>/,"")
-          control,arg = message.split(@username+" ",2)
+        if json['status']['content'] =~ /\<a +href\=\"https\:\/\/mstdn\-workers\.com\/#{@username}\"/ then
+          message = json['status']['content'].gsub(/<br\s*\/\s*>/,"\n").gsub(/\<.*?\>/,"")
+          control,arg = message.split(/#{@username}[ \n　]*/,2)
           #if control == @username then
-          if !arg.nil?
+          if !arg.nil? and arg != ""
             db.execute("insert into read_data values(?,?);",arg,JSON.dump(json))
           end
         end
       }
     end
-  ensure
-    db.close
   end
 end
 
