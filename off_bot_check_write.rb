@@ -79,6 +79,17 @@ def generate_data(d)
   return msg
 end
 
+def generate_data_full(d)
+  msg = "#" + d[6].to_s + " "
+  msg += "「" + d[1] + "」\n" if !d[1].nil?
+  msg += "場所:" + d[2] + "\n" if !d[2].nil?
+  t = Time.at(d[0])
+  msg += "日時:" + t.strftime("%Y年%m月%d日 %H時%M分～") + "\n"
+  msg += "\n"
+  msg += "詳細:" + d[5] + "\n\n"
+  return msg
+end
+
 def show_execute(db,opt,row)
   msg = "オフ会情報\n\n"
   msg_hidden = "(" + Time.now.strftime("%Y年%m月%d日 %H時%M分") + "現在の情報です)\n\n"
@@ -99,7 +110,7 @@ def show_execute(db,opt,row)
       msg_hidden += "#"+id+" は登録がありません"
     else
       d.each{ |row|
-        msg_hidden += generate_data(row)
+        msg_hidden += generate_data_full(row)
       }
     end
   else
@@ -291,6 +302,8 @@ def generate_write_off(db)
       else
         default_execute(db,arg,json,row)
       end
+    rescue => e
+      p e # debug message
     end
   end
   # 全部処理が終わったはずなので全部消す
