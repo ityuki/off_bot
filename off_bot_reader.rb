@@ -144,10 +144,9 @@ def load_all
           message = json['status']['content'].gsub(/<br\s*\/\s*>/,"\n").gsub(/\<.*?\>/,"")
           control,arg = message.split(/#{@username}[ \n　]*/,2)
           #if control == @username then
-          if !arg.nil? and arg != ""
+          arg = "" if arg.nil?
 puts "reader:" + arg
-            db.execute("insert into read_data values(?,?);",arg,JSON.dump(json))
-          end
+          db.execute("insert into read_data values(?,?);",arg,JSON.dump(json))
         end
       }
     end

@@ -96,6 +96,7 @@ def show_execute(db,opt,row)
   opt = "" if opt.nil?
   opt,other = opt.split(/[ \n]+/,2)
   opt = "" if opt.nil?
+  opt.downcase!
   if opt == "all"
     msg_hidden += "登録されている情報の最新２０件までのIDリストです\n\n"
     db.execute("select off_datetime,off_title,off_location,account_display_name,account_name,message_url,id from off order by off_datetime desc limit 20;") do |row|
@@ -229,16 +230,35 @@ end
 
 
 def help_execute
-  msg = "@off_botの使い方\n\n"
-  msg_hidden = "@off_bot show [ all | # 番号]  登録されてる情報を表示 allと # 番号以外を指定すると何も指定しないのと同じ\n"
-  msg_hidden += "@off_bot twiplaっぽいアドレス  twiplaのイベントを追加\n"
-  msg_hidden += "@off_bot add 日時 「オフ会タイトル」 場所：～  それっぽいオフ会情報を追加\n"
-  msg_hidden += "@off_bot del # 番号  それっぽいオフ会情報を削除\n"
-  msg_hidden += "@off_bot help これ。\n"
-  msg_hidden += "# 番号 内部で勝手に割り振ってるオフ会の番号\n"
-  msg_hidden += "\n"
-  msg_hidden += "これ以外は基本的に無視します\n"
+  msg = "@off_botの使い方 1/3\n\n"
+  msg_hidden = "’@off_bot show’ オフ会の一覧を表示します(現時点以降のモノ一覧です)\n\n"
+  msg_hidden += "’@off_bot show all’ オフ会の一覧を表示します(登録されているモノ全てです)\n\n"
+  msg_hidden += "’@off_bot show #id ’ #id のオフ会詳細を表示します\n\n"
+  msg_hidden += "※ #id 内部で勝手に割り振ってるオフ会の番号です\n"
+  write_mstdn({'status' => msg_hidden,'spoiler_text' => msg, 'visibility' => 'public'})
+
+  msg = "@off_botの使い方 2/3\n\n"
+  msg_hidden = "’@off_bot twiplaっぽいアドレス’  twiplaのイベントを追加します\n\n"
+  msg_hidden += "’@off_bot add 日時 「オフ会タイトル」 場所：～’  それっぽいオフ会情報を追加します\n\n"
+  msg_hidden += "’@off_bot del #id’ #id のオフ会情報を削除します\n\n"
+  msg_hidden += "※ 削除は登録したユーザーのみが可能です\n"
+  write_mstdn({'status' => msg_hidden,'spoiler_text' => msg, 'visibility' => 'public'})
+
+  msg = "@off_botの使い方 3/3\n\n"
+  msg_hidden = "’@off_bot’ 簡易ヘルプを表示します\n\n"
+  msg_hidden += "’@off_bot help’ ヘルプを表示します\n\n"
+  msg_hidden += "これら以外のコマンドは基本的に無視します\n\n"
   msg_hidden += "20秒に1回読み込むのでタイムラグがあります。\n"
+  write_mstdn({'status' => msg_hidden,'spoiler_text' => msg, 'visibility' => 'public'})
+end
+
+def help_short_execute
+  msg = "@off_botの使い方(簡易版)\n\n"
+  msg_hidden = "’@off_bot show’ オフ会の一覧を表示します\n\n"
+  msg_hidden += "’@off_bot twiplaっぽいアドレス’  twiplaのイベントを追加します\n\n"
+  msg_hidden += "’@off_bot help’ 詳細版ヘルプを表示します（長いので注意）\n\n"
+  msg_hidden += "\n"
+  msg_hidden += "コマンドは20秒に1回読み込むのでタイムラグがあります。\n"
   write_mstdn({'status' => msg_hidden,'spoiler_text' => msg, 'visibility' => 'public'})
 end
 
@@ -290,6 +310,9 @@ def generate_write_off(db)
     arg = row[0]
     json = JSON.parse(row[1])
     cmd,opt = arg.split(/[ \n　]+/,2)
+    cmd = "" if cmd.nil?
+    opt = "" if opt.nil?
+    cmd.downcase!
     begin
       if cmd == "show"
         show_execute(db,opt,row)
@@ -299,6 +322,8 @@ def generate_write_off(db)
         del_execute(db,opt,json,row)
       elsif cmd == "help"
         help_execute()
+      elsif arg == ""
+        help_short_execute()
       else
         default_execute(db,arg,json,row)
       end
