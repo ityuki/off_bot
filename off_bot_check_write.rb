@@ -108,7 +108,8 @@ def show_execute(db,opt,row)
     id = $1
     d = db.execute("select off_datetime,off_title,off_location,account_display_name,account_name,message_url,id from off where id = ?;",id)
     if d.size < 1
-      msg_hidden += "#"+id+" は登録がありません"
+      msg += "#"+id+" は登録がありません"
+      msg_hidden = ""
     else
       d.each{ |row|
         msg_hidden += generate_data_full(row)
@@ -118,7 +119,8 @@ def show_execute(db,opt,row)
     msg_hidden += "現時点以降のリストです\n\n"
     d = db.execute("select off_datetime,off_title,off_location,account_display_name,account_name,message_url,id from off where off_datetime > ? order by off_datetime;",Time.now.to_i)
     if d.size < 1
-      msg_hidden += "登録がありません"
+      msg += "登録がありません"
+      msg_hidden = ""
     else
       d.each{ |row|
         msg_hidden += generate_data(row)
@@ -128,7 +130,11 @@ def show_execute(db,opt,row)
   if msg_hidden.length > 400
     msg_hidden = msg_hidden[0,400] + "...多すぎます"
   end
-  write_mstdn({'status' => msg_hidden,'spoiler_text' => msg, 'visibility' => 'public'})
+  if msg_hidden.length > 0
+    write_mstdn({'status' => msg_hidden,'spoiler_text' => msg, 'visibility' => 'public'})
+  else
+    write_mstdn({'status' => msg, 'visibility' => 'public'})
+  end
 end
 
 def val_to_int(intstr)
