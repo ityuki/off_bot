@@ -48,7 +48,7 @@ def getTwipla(eventid)
   if body.gsub(/\<.*?\>/,"") =~ /([0-9]+)年([0-9]+)月([0-9]+)日\[.*?\]\s*([0-9]+)\:([0-9]+)/
     datetime = Time.mktime($1,$2,$3,$4,$5)
   elsif body.gsub(/\<.*?\>/,"") =~ /([0-9]+)年([0-9]+)月([0-9]+)日\[.*?\]\s*終日/
-    datetime = Time.mktime($1,$2,$3)
+    datetime = Time.mktime($1,$2,$3,23,59,59)
   end
   return [nil,nil,nil] if not body.gsub(/\<.*?\>/,"") =~ /mstdn\-workers|社畜丼/
   return [title,location,datetime]
@@ -61,7 +61,11 @@ def write_ok(db,id)
   msg += "「" + d[1] + "」\n\n" if !d[1].nil?
   msg += "場所:" + d[2] + "\n\n" if !d[2].nil?
   t = Time.at(d[0])
-  msg += "日時:" + t.strftime("%Y年%m月%d日 %H時%M分～") + "\n\n"
+  if t.hour == 23 and t.min == 59 and t.sec == 59
+    msg += "日付:" + t.strftime("%Y年%m月%d日") + "\n\n"
+  else
+    msg += "日時:" + t.strftime("%Y年%m月%d日 %H時%M分～") + "\n\n"
+  end
   msg += "\n"
   msg += "詳細:" + d[5]
   write_mstdn({'status' => msg, 'visibility' => 'public'})
@@ -73,7 +77,11 @@ def generate_data(d)
   msg += "場所:" + d[2] + "\n" if !d[2].nil?
   t = Time.at(d[0])
   #msg += "日時:" + t.strftime("%Y年%m月%d日 %H時%M分～") + "\n"
-  msg += "日時:" + t.strftime("%Y年%m月%d日 %H時%M分～") + "\n"
+  if t.hour == 23 and t.min == 59 and t.sec == 59
+    msg += "日付:" + t.strftime("%Y年%m月%d日") + "\n\n"
+  else
+    msg += "日時:" + t.strftime("%Y年%m月%d日 %H時%M分～") + "\n\n"
+  end
   msg += "\n"
   #msg += "詳細:" + d[5] + "\n\n"
   return msg
@@ -102,7 +110,11 @@ def show_execute(db,opt,row)
     db.execute("select off_datetime,off_title,off_location,account_display_name,account_name,message_url,id from off order by off_datetime desc limit 20;") do |row|
       t = Time.at(row[0])
       msg_hidden += "#" + row[6].to_s + ":"
-      msg_hidden += "日時:" + t.strftime("%Y年%m月%d日 %H時%M分～") + "\n"
+      if t.hour == 23 and t.min == 59 and t.sec == 59
+        msg_hidden += "日付:" + t.strftime("%Y年%m月%d日") + "\n\n"
+      else
+        msg_hidden += "日時:" + t.strftime("%Y年%m月%d日 %H時%M分～") + "\n\n"
+      end
     end
   elsif opt =~ /^\#([0-9]+)$/
     id = $1
@@ -138,6 +150,7 @@ def show_execute(db,opt,row)
 end
 
 def val_to_int(intstr)
+  return nil if intstr.nil?
   return intstr.to_s.gsub(/０/,'0').gsub(/１/,'1').gsub(/２/,'2').gsub(/３/,'3').gsub(/４/,'4').gsub(/５/,'5').gsub(/６/,'6').gsub(/７/,'7').gsub(/８/,'8').gsub(/９/,'9').to_i
 end
 
@@ -155,8 +168,8 @@ def add_execute(db,opt,json,row)
     year = Time.now.year
     month = nil
     day = nil
-    hour = 18
-    min = 0
+    hour = nil
+    min = nil
     if opt =~ /([0-9０１２３４５６７８９]+)[\:：]([0-9０１２３４５６７８９]+)/
       # 時間？
       hour = $1
@@ -171,12 +184,12 @@ def add_execute(db,opt,json,row)
     end
     hour = val_to_int(hour)
     min = val_to_int(min)
-    if opt =~ /([0-9０１２３４５６７８９]+)[\/／\-－]([0-9０１２３４５６７８９]+)[\/／\-－]([0-9０１２３４５６７８９]+)/
+    if opt =~ /([0-9０１２３４５６７８９]+)[\/／\-－年]([0-9０１２３４５６７８９]+)[\/／\-－月]([0-9０１２３４５６７８９]+)/
       # 年月日?
       year = $1
       month = $2
       day = $3
-    elsif opt =~ /([0-9０１２３４５６７８９]+)[\/／\-－]([0-9０１２３４５６７８９]+)/
+    elsif opt =~ /([0-9０１２３４５６７８９]+)[\/／\-－月]([0-9０１２３４５６７８９]+)/
       # 月日？
       month = $1
       day = $2
@@ -191,7 +204,11 @@ def add_execute(db,opt,json,row)
     day = val_to_int(day)
     return if month.nil? or day.nil?
     begin
-      off_datetime = Time.local(year,month,day,hour,min)
+      if hour.nil? or min.nil?
+        off_datetime = Time.local(year,month,day,23,59,59)
+      else
+        off_datetime = Time.local(year,month,day,hour,min)
+      end
     rescue
       return
     end
@@ -245,7 +262,8 @@ def help_execute
 
   msg = "@off_botの使い方 2/3\n\n"
   msg_hidden = "’@off_bot twiplaっぽいアドレス’  twiplaのイベントを追加します\n\n"
-  msg_hidden += "’@off_bot add 日時 「オフ会タイトル」 場所：～’  それっぽいオフ会情報を追加します\n\n"
+  msg_hidden += "’@off_bot add 日時 「オフ会タイトル」 場所：～’  それっぽいオフ会情報を追加します\n"
+  msg_hidden += "例えば、’add 2017/1/1 10:00～「オフ」　場所：上野駅’　など\n\n"
   msg_hidden += "’@off_bot del #id’ #id のオフ会情報を削除します\n\n"
   msg_hidden += "※ 削除は登録したユーザーのみが可能です\n"
   write_mstdn({'status' => msg_hidden,'spoiler_text' => msg, 'visibility' => 'public'})
@@ -324,7 +342,7 @@ def generate_write_off(db)
         show_execute(db,opt,row)
       elsif cmd == "add"
         add_execute(db,opt,json,row)
-      elsif cmd == "del"
+      elsif cmd == "del" or cmd == "delete"
         del_execute(db,opt,json,row)
       elsif cmd == "help"
         help_execute()
