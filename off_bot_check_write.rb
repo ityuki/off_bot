@@ -14,6 +14,7 @@ require 'uri'
 require 'json'
 require 'sqlite3'
 require 'date'
+require 'cgi'
 
 @token = nil
 
@@ -49,6 +50,13 @@ def getTwipla(eventid)
     datetime = Time.mktime($1,$2,$3,$4,$5)
   elsif body.gsub(/\<.*?\>/,"") =~ /([0-9]+)年([0-9]+)月([0-9]+)日\[.*?\]\s*終日/
     datetime = Time.mktime($1,$2,$3,23,59,59)
+  end
+  if body =~ /\<a +href\=\"http\:\/\/www\.google\.com\/calendar\/event\?[^"]*\&amp\;location\=([A-Za-z0-9\%\+]+)/
+    location_tmp = $1
+    begin
+      location = CGI.unescape(location_tmp).force_encoding("UTF-8")
+    rescue => e
+    end
   end
   return [nil,nil,nil] if not body.gsub(/\<.*?\>/,"") =~ /mstdn\-workers|社畜丼/
   return [title,location,datetime]
@@ -92,7 +100,12 @@ def generate_data_full(d)
   msg += "「" + d[1] + "」\n" if !d[1].nil?
   msg += "場所:" + d[2] + "\n" if !d[2].nil?
   t = Time.at(d[0])
-  msg += "日時:" + t.strftime("%Y年%m月%d日 %H時%M分～") + "\n"
+  #msg += "日時:" + t.strftime("%Y年%m月%d日 %H時%M分～") + "\n"
+  if t.hour == 23 and t.min == 59 and t.sec == 59
+    msg += "日付:" + t.strftime("%Y年%m月%d日") + "\n\n"
+  else
+    msg += "日時:" + t.strftime("%Y年%m月%d日 %H時%M分～") + "\n\n"
+  end
   msg += "\n"
   msg += "詳細:" + d[5] + "\n\n"
   return msg
@@ -251,6 +264,50 @@ def del_execute(db,opt,json,row)
   end
 end
 
+def reload_execute(db,opt,json,row)
+  opt =~ /^\#([0-9]+)$/
+  id = $1
+  return if id.nil?
+  account_id = json['status']['account']['id']
+  # check
+  check = db.execute("select account_id,message_url,message_id from off where id = ?;",id.to_i)
+  if check.size < 1
+    write_mstdn({'status' => "指定されたオフ会情報が見つかりません id= # " + id, 'visibility' => 'public'})
+    return
+  end
+  addid = check[0][0]
+  msgurl = check[0][1]
+  # twipla only
+  datas = db.execute("select message_content from off_update where id = ? and message_id = ?;",id.to_i,check[0][2].to_i)
+  if datas.size < 1
+    write_mstdn({'status' => "オフ会情報の更新に失敗（内部エラー:" + __LINE__ + ")", 'visibility' => 'public'})
+    return
+  end
+  json = JSON.parse(datas[0][0])
+  return if json.nil?
+  off_datetime = nil
+  off_title = nil
+  off_location = nil
+  if json['status']['content'] =~ /http\:\/\/twipla\.jp\/events\/([0-9]+)/
+    off_title,off_location,off_datetime = getTwipla($1)
+  else
+    write_mstdn({'status' => "更新出来るオフ会情報はtwiplaのものだけです id= # " + id + "は更新出来ません", 'visibility' => 'public'})
+    return
+  end
+  if off_datetime != nil
+    puts off_title,off_location,off_datetime
+    db.execute("update off set off_datetime = ?,off_title = ?,off_location = ? where id = ?;",
+               off_datetime.to_i,off_title,off_location,
+               id
+              );
+    d = (db.execute("select off_datetime,off_title,off_location,account_display_name,account_name,message_url,id from off where id = ?;",id))[0]
+    text = generate_data(d)
+    write_mstdn({'status' => "オフ会情報 # " + id + " をアップデートしました\n" + "更新されたオフ情報:" + msgurl + "\n\n" + text, 'visibility' => 'public'})
+  else
+    write_mstdn({'status' => "オフ会情報 # " + id + " のアップデートに失敗しました（タイトルがないよ）\n", 'visibility' => 'public'})
+  end
+end
+
 
 def help_execute
   msg = "@off_botの使い方 1/3\n\n"
@@ -258,14 +315,16 @@ def help_execute
   msg_hidden += "’@off_bot show all’ オフ会の一覧を表示します(登録されているモノ全てです)\n\n"
   msg_hidden += "’@off_bot show #id ’ #id のオフ会詳細を表示します\n\n"
   msg_hidden += "※ #id 内部で勝手に割り振ってるオフ会の番号です\n"
+  msg_hidden += "http://offbot.mstdn-workers.net/も参照ください\n"
   write_mstdn({'status' => msg_hidden,'spoiler_text' => msg, 'visibility' => 'public'})
 
   msg = "@off_botの使い方 2/3\n\n"
   msg_hidden = "’@off_bot twiplaっぽいアドレス’  twiplaのイベントを追加します\n\n"
+  msg_hidden += "’@off_bot reload #id’ #id のオフ会情報を再読み込みします(twiplaのみ)\n\n"
   msg_hidden += "’@off_bot add 日時 「オフ会タイトル」 場所：～’  それっぽいオフ会情報を追加します\n"
   msg_hidden += "例えば、’add 2017/1/1 10:00～「オフ」　場所：上野駅’　など\n\n"
-  msg_hidden += "’@off_bot del #id’ #id のオフ会情報を削除します\n\n"
-  msg_hidden += "※ 削除は登録したユーザーのみが可能です\n"
+  msg_hidden += "’@off_bot del #id’ #id のオフ会情報を削除します\n"
+  msg_hidden += "※ 削除は登録したユーザーのみが可能です\n\n"
   write_mstdn({'status' => msg_hidden,'spoiler_text' => msg, 'visibility' => 'public'})
 
   msg = "@off_botの使い方 3/3\n\n"
@@ -281,6 +340,7 @@ def help_short_execute
   msg_hidden = "’@off_bot show’ オフ会の一覧を表示します\n\n"
   msg_hidden += "’@off_bot twiplaっぽいアドレス’  twiplaのイベントを追加します\n\n"
   msg_hidden += "’@off_bot help’ 詳細版ヘルプを表示します（長いので注意）\n\n"
+  msg_hidden += "http://offbot.mstdn-workers.net/ も参照ください\n"
   msg_hidden += "\n"
   msg_hidden += "コマンドは20秒に1回読み込むのでタイムラグがあります。\n"
   write_mstdn({'status' => msg_hidden,'spoiler_text' => msg, 'visibility' => 'public'})
@@ -344,6 +404,8 @@ def generate_write_off(db)
         add_execute(db,opt,json,row)
       elsif cmd == "del" or cmd == "delete"
         del_execute(db,opt,json,row)
+      elsif cmd == "reload"
+        reload_execute(db,opt,json,row)
       elsif cmd == "help"
         help_execute()
       elsif arg == ""
@@ -353,6 +415,7 @@ def generate_write_off(db)
       end
     rescue => e
       p e # debug message
+      p e.backtrace
     end
   end
   # 全部処理が終わったはずなので全部消す
