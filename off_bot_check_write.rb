@@ -58,12 +58,12 @@ def getTwipla(eventid)
     rescue => e
     end
   end
-  return [nil,nil,nil] if not body.gsub(/\<.*?\>/,"") =~ /mstdn\-workers|社畜丼/
-  return [title,location,datetime]
+  return [nil,nil,nil,nil] if not body.gsub(/\<.*?\>/,"") =~ /mstdn\-workers|社畜丼/
+  return [title,location,datetime,"http://twipla.jp/events/" + eventid]
 end
 
 def write_ok(db,id)
-  d = (db.execute("select off_datetime,off_title,off_location,account_display_name,account_name,message_url from off where id = ?;",id))[0]
+  d = (db.execute("select off_datetime,off_title,off_location,account_display_name,account_name,message_url,off_url from off where id = ?;",id))[0]
   msg = "オフ会情報\n\n"
   msg += "ユーザ:" + d[3] + "(" + d[4] + ") によってオフ会情報 #" + id.to_s + " が登録されました\n\n"
   msg += "「" + d[1] + "」\n\n" if !d[1].nil?
@@ -76,11 +76,12 @@ def write_ok(db,id)
   end
   msg += "\n"
   msg += "詳細:" + d[5]
+  msg += "\n\n" + d[6] if !d[6].nil?
   write_mstdn({'status' => msg, 'visibility' => 'public'})
 end
 
 def generate_data(d)
-  msg = "#" + d[6].to_s + " "
+  msg = "#" + d[7].to_s + " "
   msg += "「" + d[1] + "」\n" if !d[1].nil?
   msg += "場所:" + d[2] + "\n" if !d[2].nil?
   t = Time.at(d[0])
@@ -96,7 +97,7 @@ def generate_data(d)
 end
 
 def generate_data_full(d)
-  msg = "#" + d[6].to_s + " "
+  msg = "#" + d[7].to_s + " "
   msg += "「" + d[1] + "」\n" if !d[1].nil?
   msg += "場所:" + d[2] + "\n" if !d[2].nil?
   t = Time.at(d[0])
@@ -107,7 +108,9 @@ def generate_data_full(d)
     msg += "日時:" + t.strftime("%Y年%m月%d日 %H時%M分～") + "\n\n"
   end
   msg += "\n"
-  msg += "詳細:" + d[5] + "\n\n"
+  msg += "詳細:" + d[5]
+  msg += "\n\n" + d[6] if !d[6].nil?
+  msg += "\n\n"
   return msg
 end
 
@@ -120,9 +123,9 @@ def show_execute(db,opt,row)
   opt.downcase!
   if opt == "all"
     msg_hidden += "登録されている情報の最新２０件までのIDリストです\n\n"
-    db.execute("select off_datetime,off_title,off_location,account_display_name,account_name,message_url,id from off order by off_datetime desc limit 20;") do |row|
+    db.execute("select off_datetime,off_title,off_location,account_display_name,account_name,message_url,off_url,id from off order by off_datetime desc limit 20;") do |row|
       t = Time.at(row[0])
-      msg_hidden += "#" + row[6].to_s + ":"
+      msg_hidden += "#" + row[7].to_s + ":"
       if t.hour == 23 and t.min == 59 and t.sec == 59
         msg_hidden += "日付:" + t.strftime("%Y年%m月%d日") + "\n\n"
       else
@@ -131,7 +134,7 @@ def show_execute(db,opt,row)
     end
   elsif opt =~ /^\#([0-9]+)$/
     id = $1
-    d = db.execute("select off_datetime,off_title,off_location,account_display_name,account_name,message_url,id from off where id = ?;",id)
+    d = db.execute("select off_datetime,off_title,off_location,account_display_name,account_name,message_url,off_url,id from off where id = ?;",id)
     if d.size < 1
       msg += "#"+id+" は登録がありません"
       msg_hidden = ""
@@ -142,7 +145,7 @@ def show_execute(db,opt,row)
     end
   else
     msg_hidden += "現時点以降のリストです\n\n"
-    d = db.execute("select off_datetime,off_title,off_location,account_display_name,account_name,message_url,id from off where off_datetime > ? order by off_datetime;",Time.now.to_i)
+    d = db.execute("select off_datetime,off_title,off_location,account_display_name,account_name,message_url,off_url,id from off where off_datetime > ? order by off_datetime;",Time.now.to_i)
     if d.size < 1
       msg += "登録がありません"
       msg_hidden = ""
@@ -154,6 +157,7 @@ def show_execute(db,opt,row)
   end
   if msg_hidden.length > 400
     msg_hidden = msg_hidden[0,400] + "...多すぎます"
+    msg_hidden += "\n\nhttp://offbot.mstdn-workers.net/view.html も参照ください"
   end
   if msg_hidden.length > 0
     write_mstdn({'status' => msg_hidden,'spoiler_text' => msg, 'visibility' => 'public'})
@@ -230,9 +234,9 @@ def add_execute(db,opt,json,row)
     opt =~ /「(.*?)」/
     off_title = $1
     return if off_datetime.nil? or off_location.nil? or off_title.nil?
-      db.execute("insert into off values(NULL,?,?, ?,?,?, ?,?,?, ?, ?);",
+      db.execute("insert into off values(NULL,?,?, ?,?,?,?, ?,?,?, ?, ?);",
                  Time.now.to_i,Time.now.to_i,
-                 off_datetime.to_i,off_title,off_location,
+                 off_datetime.to_i,off_title,off_location,nil,
                  account_id,account_name,account_display_name,
                  message_url,message_id)
       id = db.last_insert_row_id
@@ -284,7 +288,7 @@ def reload_execute(db,opt,json,row)
     return
   end
   json = JSON.parse(datas[0][0])
-  return if json.nil?
+  return if json.nil? or json['status'].nil? or json['status']['content'].nil?
   off_datetime = nil
   off_title = nil
   off_location = nil
@@ -350,6 +354,7 @@ def default_execute(db,arg,json,row)
     off_datetime = nil
     off_title = nil
     off_location = nil
+    off_url = nil
     account_id = json['status']['account']['id']
     account_name = json['status']['account']['username']
     account_display_name = json['status']['account']['display_name']
@@ -357,7 +362,7 @@ def default_execute(db,arg,json,row)
     message_url = json['status']['url']
     message_id = json['status']['id']
     if json['status']['content'] =~ /http\:\/\/twipla\.jp\/events\/([0-9]+)/
-      off_title,off_location,off_datetime = getTwipla($1)
+      off_title,off_location,off_datetime,off_uri = getTwipla($1)
     else
       # 途中 :P
       # off_datetimeっぽいものを探す
@@ -374,9 +379,9 @@ def default_execute(db,arg,json,row)
     end
     if off_datetime != nil
     puts off_title,off_location,off_datetime
-      db.execute("insert into off values(NULL,?,?, ?,?,?, ?,?,?, ?, ?);",
+      db.execute("insert into off values(NULL,?,?, ?,?,?,?, ?,?,?, ?, ?);",
                  Time.now.to_i,Time.now.to_i,
-                 off_datetime.to_i,off_title,off_location,
+                 off_datetime.to_i,off_title,off_location,off_uri,
                  account_id,account_name,account_display_name,
                  message_url,message_id)
       id = db.last_insert_row_id

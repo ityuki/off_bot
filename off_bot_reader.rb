@@ -22,6 +22,7 @@ File.open("off_bot.token","r"){|f|
   @token = f.gets.chomp
 }
 
+
 @init_sql = [
 <<-SQL_EOF1,<<-SQL_EOF2,<<-SQL_EOF3,<<-SQL_EOF4
   -- 最終読み込みIDと時間を保持
@@ -45,6 +46,7 @@ SQL_EOF2
     off_datetime integer not null, -- オフ会日時
     off_title text, -- オフ会のタイトル（分かれば）
     off_location text, -- オフ会の場所（分かれば）
+    off_url text, -- オフ会関連URL
     
     account_id integer not null, -- 更新者アカウントID
     account_name text not null, -- 更新者アカウント名
