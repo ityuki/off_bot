@@ -260,7 +260,7 @@ def del_execute(db,opt,json,row)
   end
   addid = check[0][0]
   msgurl = check[0][1]
-  if account_id.to_i != addid
+  if addid > 0 and account_id.to_i != addid
     write_mstdn({'status' => "登録ユーザが違うため消せません id= # " + id, 'visibility' => 'public'})
   else
     db.execute("delete from off where id = ?;",id.to_i)
@@ -362,7 +362,7 @@ def default_execute(db,arg,json,row)
     message_url = json['status']['url']
     message_id = json['status']['id']
     if json['status']['content'] =~ /http\:\/\/twipla\.jp\/events\/([0-9]+)/
-      off_title,off_location,off_datetime,off_uri = getTwipla($1)
+      off_title,off_location,off_datetime,off_url = getTwipla($1)
     else
       # 途中 :P
       # off_datetimeっぽいものを探す
@@ -378,13 +378,34 @@ def default_execute(db,arg,json,row)
       end
     end
     if off_datetime != nil
-    puts off_title,off_location,off_datetime
-      db.execute("insert into off values(NULL,?,?, ?,?,?,?, ?,?,?, ?, ?);",
-                 Time.now.to_i,Time.now.to_i,
-                 off_datetime.to_i,off_title,off_location,off_uri,
-                 account_id,account_name,account_display_name,
-                 message_url,message_id)
-      id = db.last_insert_row_id
+      puts off_title,off_location,off_datetime,off_url
+      force_update = false
+      id = nil
+      if off_url != nil then
+        check = db.execute("select id,account_id from off where off_url = ?",off_url)
+        if check.size > 0
+          # もしあっても、権限的に更新出来なければ新規登録にする
+          id = check[0][0]
+          force_update = true if check[0][1] < 0
+        end
+      end
+      if force_update
+        puts "force_update:" + id.to_s
+        db.execute("update off set last_update=?, off_datetime=?,off_title=?,off_location=?,off_url=?, account_id=?,account_name=?,account_display_name=?, message_url=?, message_id=? where id = ?",
+                   Time.now.to_i,
+                   off_datetime.to_i,off_title,off_location,off_url,
+                   account_id,account_name,account_display_name,
+                   message_url,message_id,
+                   id
+                  )
+      else
+        db.execute("insert into off values(NULL,?,?, ?,?,?,?, ?,?,?, ?, ?);",
+                   Time.now.to_i,Time.now.to_i,
+                   off_datetime.to_i,off_title,off_location,off_url,
+                   account_id,account_name,account_display_name,
+                   message_url,message_id)
+        id = db.last_insert_row_id
+      end
       db.execute("insert into off_update values(?,?,?, ?,?,?, ?,?);",
                  id,message_id,Time.now.to_i,
                  account_id,account_name,account_display_name,
@@ -427,11 +448,61 @@ def generate_write_off(db)
   db.execute("delete from read_data;");
 end
 
+def generate_write_off_ltl(db)
+  db.execute("select json from read_data_ltl;") do |row|
+    begin
+      json = JSON.parse(row[0])
+      off_datetime = nil
+      off_title = nil
+      off_location = nil
+      off_url = nil
+      account_id = json['account']['id']
+      account_name = json['account']['username']
+      account_display_name = json['account']['display_name']
+      message_content = row[0]
+      message_url = json['url']
+      message_id = json['id']
+      next if !(json['content'] =~ /http\:\/\/twipla\.jp\/events\/([0-9]+)/)
+      off_title,off_location,off_datetime,off_url = getTwipla($1)
+      if off_datetime != nil
+        puts "LTL-add",off_title,off_location,off_datetime,off_url
+        # 登録済みか？
+        check = db.execute("select id from off where off_url = ?;",off_url)
+        if check.size > 0 then
+          puts "...skip... exist ID:" + check[0][0].to_s
+          next
+        end
+        # 未登録URL
+        # account_id,message_idをマイナスにして登録
+        db.execute("insert into off values(NULL,?,?, ?,?,?,?, ?,?,?, ?, ?);",
+                   Time.now.to_i,Time.now.to_i,
+                   off_datetime.to_i,off_title,off_location,off_url,
+                   -account_id,account_name,account_display_name,
+                   message_url,-message_id)
+        id = db.last_insert_row_id
+        db.execute("insert into off_update values(?,?,?, ?,?,?, ?,?);",
+                   id,-message_id,Time.now.to_i,
+                   -account_id,account_name,account_display_name,
+                   message_content,message_url)
+      end
+    rescue => e
+      p e # debug message
+      p e.backtrace
+    end
+  end
+  # 全部処理が終わったはずなので全部消す
+  db.execute("delete from read_data_ltl;");
+end
+
 def doit
   SQLite3::Database.new(@db) do |db|
     db.execute(@db_1st_execute)
     db.transaction do
       generate_write_off(db)
+      #raise Exception # debug
+    end
+    db.transaction do
+      generate_write_off_ltl(db)
       #raise Exception # debug
     end
   end
