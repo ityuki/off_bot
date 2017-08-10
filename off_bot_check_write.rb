@@ -304,7 +304,7 @@ def reload_execute(db,opt,json,row)
                off_datetime.to_i,off_title,off_location,
                id
               );
-    d = (db.execute("select off_datetime,off_title,off_location,account_display_name,account_name,message_url,id from off where id = ?;",id))[0]
+    d = (db.execute("select off_datetime,off_title,off_location,account_display_name,account_name,message_url,off_url,id from off where id = ?;",id))[0]
     text = generate_data(d)
     write_mstdn({'status' => "オフ会情報 # " + id + " をアップデートしました\n" + "更新されたオフ情報:" + msgurl + "\n\n" + text, 'visibility' => 'public'})
   else
