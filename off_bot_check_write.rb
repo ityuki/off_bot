@@ -274,25 +274,27 @@ def reload_execute(db,opt,json,row)
   return if id.nil?
   account_id = json['status']['account']['id']
   # check
-  check = db.execute("select account_id,message_url,message_id from off where id = ?;",id.to_i)
+  check = db.execute("select account_id,message_url,message_id,off_url from off where id = ?;",id.to_i)
   if check.size < 1
     write_mstdn({'status' => "指定されたオフ会情報が見つかりません id= # " + id, 'visibility' => 'public'})
     return
   end
   addid = check[0][0]
   msgurl = check[0][1]
+  off_url = check[0][3]
   # twipla only
-  datas = db.execute("select message_content from off_update where id = ? and message_id = ?;",id.to_i,check[0][2].to_i)
-  if datas.size < 1
-    write_mstdn({'status' => "オフ会情報の更新に失敗（内部エラー:" + __LINE__ + ")", 'visibility' => 'public'})
-    return
-  end
-  json = JSON.parse(datas[0][0])
-  return if json.nil? or json['status'].nil? or json['status']['content'].nil?
+  #datas = db.execute("select off_url,message_content from off_update where id = ? and message_id = ?;",id.to_i,check[0][2].to_i)
+  #if datas.size < 1
+  #  write_mstdn({'status' => "オフ会情報の更新に失敗（内部エラー:" + __LINE__ + ")", 'visibility' => 'public'})
+  #  return
+  #end
+  #json = JSON.parse(datas[0][0])
+  #return if json.nil? or json['status'].nil? or json['status']['content'].nil?
   off_datetime = nil
   off_title = nil
   off_location = nil
-  if json['status']['content'] =~ /http\:\/\/twipla\.jp\/events\/([0-9]+)/
+  #if json['status']['content'] =~ /http\:\/\/twipla\.jp\/events\/([0-9]+)/
+  if off_url =~ /http\:\/\/twipla\.jp\/events\/([0-9]+)/
     off_title,off_location,off_datetime = getTwipla($1)
   else
     write_mstdn({'status' => "更新出来るオフ会情報はtwiplaのものだけです id= # " + id + "は更新出来ません", 'visibility' => 'public'})
