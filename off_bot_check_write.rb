@@ -51,7 +51,7 @@ def getTwipla(eventid)
   elsif body.gsub(/\<.*?\>/,"") =~ /([0-9]+)年([0-9]+)月([0-9]+)日\[.*?\]\s*終日/
     datetime = Time.mktime($1,$2,$3,23,59,59)
   end
-  if body =~ /\<a +href\=\"http\:\/\/www\.google\.com\/calendar\/event\?[^"]*\&amp\;location\=([A-Za-z0-9\%\+]+)/
+  if body =~ /\<a +href\=\"http\:\/\/www\.google\.com\/calendar\/event\?[^"]*\&amp\;location\=([A-Za-z0-9\%\+\-\.\\\_]+)/
     location_tmp = $1
     begin
       location = CGI.unescape(location_tmp).force_encoding("UTF-8")
