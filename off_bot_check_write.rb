@@ -50,6 +50,10 @@ def getTwipla(eventid)
     datetime = Time.mktime($1,$2,$3,$4,$5)
   elsif body.gsub(/\<.*?\>/,"") =~ /([0-9]+)年([0-9]+)月([0-9]+)日\[.*?\]\s*終日/
     datetime = Time.mktime($1,$2,$3,23,59,59)
+  elsif body.gsub(/\<.*?\>/,"") =~ /([0-9]+)年([0-9]+)月([0-9]+)日\[.*?\]\s*未定/
+    datetime = Time.mktime($1,$2,$3,23,59,59)
+  elsif body =~ /\<a +href\=\"http\:\/\/www\.google\.com\/calendar\/event\?[^"]*\&amp\;dates\=([0-9]{4})([0-9]{2})([0-9]{2})T([0-9]{2})([0-9]{2})([0-9]{2})Z/
+    datetime = Time.mktime($1,$2,$3,$4.to_i+9,$5,$6)
   end
   if body =~ /\<a +href\=\"http\:\/\/www\.google\.com\/calendar\/event\?[^"]*\&amp\;location\=([A-Za-z0-9\%\+\-\.\\\_]+)/
     location_tmp = $1
@@ -219,12 +223,15 @@ def add_execute(db,opt,json,row)
     year = val_to_int(year)
     month = val_to_int(month)
     day = val_to_int(day)
-    return if month.nil? or day.nil?
+    # return if month.nil? or day.nil?
     begin
-      if hour.nil? or min.nil?
-        off_datetime = Time.local(year,month,day,23,59,59)
+      if month.nil? or day.nil?
       else
-        off_datetime = Time.local(year,month,day,hour,min)
+        if hour.nil? or min.nil?
+          off_datetime = Time.local(year,month,day,23,59,59)
+        else
+          off_datetime = Time.local(year,month,day,hour,min)
+        end
       end
     rescue
       return
@@ -233,6 +240,13 @@ def add_execute(db,opt,json,row)
     off_location = $1
     opt =~ /「(.*?)」/
     off_title = $1
+    if off_datetime.nil?
+      # もしかして: twipla?
+      if json['status']['content'] =~ /http\:\/\/twipla\.jp\/events\/([0-9]+)/
+        off_title,off_location,off_datetime,off_url = getTwipla($1)
+      end
+    end
+    puts off_title,off_location,off_datetime,off_url
     return if off_datetime.nil? or off_location.nil? or off_title.nil?
       db.execute("insert into off values(NULL,?,?, ?,?,?,?, ?,?,?, ?, ?);",
                  Time.now.to_i,Time.now.to_i,
@@ -471,7 +485,13 @@ def generate_write_off_ltl(db)
         # 登録済みか？
         check = db.execute("select id from off where off_url = ?;",off_url)
         if check.size > 0 then
-          puts "...skip... exist ID:" + check[0][0].to_s
+          # puts "...skip... exist ID:" + check[0][0].to_s
+          # silent-mode update
+          db.execute("update off set off_datetime = ?,off_title = ?,off_location = ? where id = ?;",
+            off_datetime.to_i,off_title,off_location,
+            check[0][0]
+          );
+          puts "...silent-mode reloaded... exist ID:" + check[0][0].to_s
           next
         end
         # 未登録URL
